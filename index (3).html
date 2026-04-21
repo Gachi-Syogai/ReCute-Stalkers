@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover,maximum-scale=1.0,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Recute">
+<meta name="theme-color" content="#14100D">
+<title>Recute 打刻</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{
+  --bg:#14100D;--surface:#1E1812;--surface2:#261E18;--border:#3A2E26;
+  --rental:#C17A68;--rental-dim:#2A1A16;--rental-txt:#F2C4B4;
+  --return:#6A9B7B;--return-dim:#0E231A;--return-txt:#A8D4B8;
+  --text:#F0E8E0;--muted:#7A6858;--hint:#4A3C30;--accent:#BF7B6A;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%;overflow:hidden;}
+body{
+  font-family:'Noto Sans JP',sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;
+  display:flex;flex-direction:column;
+}
+
+/* ── ヘッダー ── */
+.header{
+  padding:calc(var(--safe-top) + 10px) 18px 10px;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+}
+.brand{font-size:11px;color:var(--accent);font-weight:700;letter-spacing:.18em;}
+.conn{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--hint);transition:background .3s;}
+.dot.ok {background:var(--return);box-shadow:0 0 5px var(--return);}
+.dot.err{background:var(--rental);}
+
+/* ── タブバー（底） ── */
+.tabbar{
+  display:flex;background:var(--surface);
+  border-top:1px solid var(--border);
+  padding-bottom:var(--safe-bot);flex-shrink:0;
+}
+.tabbar-btn{
+  flex:1;padding:10px 0 8px;border:none;background:transparent;
+  color:var(--hint);font-family:inherit;font-size:10px;font-weight:600;
+  letter-spacing:.06em;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;gap:3px;transition:color .15s;
+}
+.tabbar-btn .ti{font-size:18px;line-height:1;}
+.tabbar-btn.active{color:var(--accent);}
+
+/* ── パネル ── */
+.panels{flex:1;overflow:hidden;position:relative;}
+.panel{
+  position:absolute;inset:0;overflow-y:auto;
+  padding:16px 16px 20px;display:flex;flex-direction:column;gap:14px;
+  opacity:0;pointer-events:none;transform:translateX(20px);
+  transition:opacity .2s,transform .2s;
+}
+.panel.active{opacity:1;pointer-events:auto;transform:none;}
+
+/* ── 時計 ── */
+.clock{text-align:center;padding:4px 0;}
+.clock-time{
+  font-family:'DM Mono',monospace;
+  font-size:clamp(36px,11vw,52px);font-weight:300;letter-spacing:.03em;line-height:1;
+}
+.clock-date{font-size:12px;color:var(--muted);margin-top:5px;letter-spacing:.05em;}
+
+/* ── スポットチップ ── */
+.spot-scroll{
+  display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;
+}
+.spot-scroll::-webkit-scrollbar{display:none;}
+.spot-chip{
+  flex-shrink:0;padding:9px 16px;
+  border:1.5px solid var(--border);border-radius:100px;
+  background:transparent;color:var(--muted);
+  font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;
+  transition:all .15s;white-space:nowrap;
+}
+.spot-chip.active{
+  background:var(--rental-dim);border-color:var(--rental);
+  color:var(--rental-txt);font-weight:700;
+}
+.spot-chip.loading{opacity:.4;pointer-events:none;}
+
+/* ── 機器ID ── */
+.dev-row{
+  display:flex;align-items:center;gap:10px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:12px 16px;
+}
+.dev-lbl{font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.1em;min-width:52px;}
+.dev-input{
+  flex:1;background:transparent;border:none;color:var(--text);
+  font-family:inherit;font-size:15px;font-weight:500;outline:none;
+}
+.dev-input::placeholder{color:var(--hint);font-weight:400;}
+
+/* ── 打刻ボタン ── */
+.punch-stack{display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;}
+.punch-btn{
+  flex:1;position:relative;border:1.5px solid;border-radius:18px;
+  cursor:pointer;font-family:inherit;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:6px;overflow:hidden;
+  transition:transform .12s;user-select:none;min-height:90px;
+}
+.punch-btn:not(.disabled):active{transform:scale(0.96);}
+.punch-btn.disabled{opacity:.25;pointer-events:none;}
+.punch-btn.sending{opacity:.55;pointer-events:none;}
+.rental-btn{background:var(--rental-dim);border-color:var(--rental);}
+.return-btn{background:var(--return-dim);border-color:var(--return);}
+.punch-icon{font-size:28px;line-height:1;}
+.punch-label{font-size:22px;font-weight:700;letter-spacing:.05em;}
+.punch-sub{font-size:10px;font-weight:300;letter-spacing:.12em;opacity:.55;}
+.rental-btn .punch-label,.rental-btn .punch-sub{color:var(--rental-txt);}
+.return-btn .punch-label,.return-btn .punch-sub{color:var(--return-txt);}
+/* リップル */
+.ripple{
+  position:absolute;border-radius:50%;width:120px;height:120px;
+  margin:-60px 0 0 -60px;transform:scale(0);
+  animation:rpl .6s ease-out;pointer-events:none;
+}
+.rental-btn .ripple{background:rgba(193,122,104,.35);}
+.return-btn .ripple{background:rgba(106,155,123,.35);}
+@keyframes rpl{to{transform:scale(5);opacity:0;}}
+
+/* ── フラッシュ ── */
+.flash{
+  padding:11px 14px;border-radius:11px;font-size:13px;font-weight:500;
+  display:flex;align-items:center;gap:8px;
+  opacity:0;transition:opacity .2s;pointer-events:none;flex-shrink:0;
+}
+.flash.show{opacity:1;}
+.flash.ok  {background:var(--return-dim);color:var(--return-txt);border:1px solid #0E2A1E;}
+.flash.err {background:#1E0E0A;color:#F2A090;border:1px solid #3A1A12;}
+.flash.wait{background:var(--surface);color:var(--muted);border:1px solid var(--border);}
+
+/* ── ミニログ ── */
+.mini-log{display:flex;flex-direction:column;gap:5px;flex-shrink:0;}
+.mini-log-hdr{display:flex;align-items:center;justify-content:space-between;}
+.mini-log-title{font-size:10px;color:var(--hint);font-weight:600;letter-spacing:.1em;text-transform:uppercase;}
+.mini-log-spot{font-size:11px;color:var(--accent);font-weight:600;margin-left:6px;}
+.icon-btn{background:none;border:none;color:var(--hint);font-size:12px;cursor:pointer;padding:2px 6px;border-radius:4px;}
+.icon-btn:active{color:var(--muted);}
+.log-rows{display:flex;flex-direction:column;gap:4px;}
+.log-row{
+  display:grid;grid-template-columns:36px 1fr auto;
+  align-items:center;gap:8px;padding:8px 12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:9px;font-size:11px;
+}
+.log-row.new{animation:slideIn .3s ease;}
+@keyframes slideIn{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:none;}}
+.log-time{font-family:'DM Mono',monospace;color:var(--muted);}
+.log-dev{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.badge{font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+.badge.r{background:var(--rental-dim);color:var(--rental-txt);border:1px solid #3A1E18;}
+.badge.t{background:var(--return-dim);color:var(--return-txt);border:1px solid #0E2A1E;}
+.empty-hint{text-align:center;padding:14px;color:var(--hint);font-size:12px;border:1px dashed var(--border);border-radius:9px;}
+
+/* ── スポット管理パネル ── */
+.spot-add-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.spot-irow{display:flex;align-items:center;padding:12px 16px;gap:10px;border-bottom:1px solid var(--border);}
+.spot-irow:last-child{border-bottom:none;}
+.slbl{font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.1em;min-width:40px;}
+.stxt{flex:1;background:transparent;border:none;color:var(--text);font-family:inherit;font-size:14px;outline:none;}
+.stxt::placeholder{color:var(--hint);}
+.add-btn{
+  width:100%;padding:14px;background:var(--accent);color:#fff;
+  border:none;border-radius:12px;font-size:15px;font-weight:700;
+  cursor:pointer;font-family:inherit;letter-spacing:.06em;transition:opacity .15s;
+}
+.add-btn:active{opacity:.85;}
+.add-btn:disabled{background:var(--border);cursor:default;opacity:1;}
+.section-lbl{font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.1em;text-transform:uppercase;}
+.spot-list{display:flex;flex-direction:column;gap:6px;}
+.spot-item{
+  display:flex;align-items:center;gap:10px;padding:12px 14px;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  animation:slideIn .25s ease;
+}
+.spot-id  {font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);min-width:72px;}
+.spot-name{flex:1;font-size:13px;color:var(--text);}
+.del-btn  {background:none;border:none;color:var(--hint);font-size:18px;cursor:pointer;padding:2px 6px;border-radius:4px;font-family:inherit;transition:color .15s;}
+.del-btn:active{color:var(--rental);}
+.spot-msg{font-size:11px;padding:9px 13px;border-radius:9px;display:none;}
+.spot-msg.show{display:block;}
+.spot-msg.ok {background:var(--return-dim);color:var(--return-txt);border:1px solid #0E2A1E;}
+.spot-msg.err{background:#1E0E0A;color:#F2A090;border:1px solid #3A1A12;}
+
+/* ── 設定パネル ── */
+.cfg-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.cfg-row{display:flex;align-items:center;padding:14px 16px;gap:12px;border-bottom:1px solid var(--border);}
+.cfg-row:last-child{border-bottom:none;}
+.cfg-lbl{font-size:11px;color:var(--muted);font-weight:600;min-width:80px;flex-shrink:0;}
+.cfg-input{
+  flex:1;background:transparent;border:none;color:var(--text);
+  font-family:'DM Mono',monospace;font-size:12px;outline:none;min-width:0;
+}
+.cfg-input::placeholder{color:var(--hint);font-size:11px;}
+.save-btn{
+  width:100%;padding:14px;background:var(--accent);color:#fff;
+  border:none;border-radius:12px;font-size:15px;font-weight:700;
+  cursor:pointer;font-family:inherit;transition:opacity .15s;
+}
+.save-btn:active{opacity:.85;}
+.cfg-hint{font-size:11px;color:var(--hint);line-height:1.7;padding:2px 0;}
+.cfg-section-lbl{font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.1em;text-transform:uppercase;}
+
+/* ── スピナー ── */
+@keyframes spin{to{transform:rotate(360deg);}}
+.spin{display:inline-block;animation:spin .7s linear infinite;}
+
+/* ── 初回設定オーバーレイ ── */
+.setup-overlay{
+  position:fixed;inset:0;background:var(--bg);z-index:200;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:32px 24px;gap:20px;text-align:center;
+}
+.setup-overlay.hidden{display:none;}
+.setup-logo{font-size:13px;color:var(--accent);font-weight:700;letter-spacing:.18em;margin-bottom:4px;}
+.setup-title{font-size:22px;font-weight:700;line-height:1.3;}
+.setup-desc{font-size:13px;color:var(--muted);line-height:1.7;}
+.setup-input{
+  width:100%;padding:14px 16px;background:var(--surface);
+  border:1px solid var(--border);border-radius:12px;
+  color:var(--text);font-family:'DM Mono',monospace;font-size:12px;outline:none;
+  transition:border-color .15s;
+}
+.setup-input:focus{border-color:var(--accent);}
+.setup-input::placeholder{color:var(--hint);font-size:11px;}
+.setup-btn{
+  width:100%;padding:15px;background:var(--accent);color:#fff;
+  border:none;border-radius:14px;font-size:16px;font-weight:700;
+  cursor:pointer;font-family:inherit;transition:opacity .15s;
+}
+.setup-btn:active{opacity:.85;}
+.setup-btn:disabled{background:var(--border);cursor:default;opacity:1;}
+</style>
+</head>
+<body>
+
+<!-- 初回設定オーバーレイ -->
+<div class="setup-overlay" id="setupOverlay">
+  <div>
+    <div class="setup-logo">RECUTE</div>
+    <div class="setup-title">GAS URLを設定してください</div>
+  </div>
+  <div class="setup-desc">
+    Google Apps Script の<br>
+    ウェブアプリURLを貼り付けてください
+  </div>
+  <input class="setup-input" id="setupUrlInput" type="url"
+    placeholder="https://script.google.com/macros/s/…/exec"
+    oninput="document.getElementById('setupSaveBtn').disabled = !this.value.trim()">
+  <button class="setup-btn" id="setupSaveBtn" onclick="saveSetup()" disabled>
+    保存して始める
+  </button>
+</div>
+
+<!-- ヘッダー -->
+<header class="header">
+  <div class="brand">RECUTE PUNCH</div>
+  <div class="conn">
+    <div class="dot" id="connDot"></div>
+    <span id="connLabel">—</span>
+  </div>
+</header>
+
+<!-- パネル群 -->
+<div class="panels">
+
+  <!-- 打刻パネル -->
+  <div class="panel active" id="panel-punch">
+    <div class="clock">
+      <div class="clock-time" id="ct">--:--:--</div>
+      <div class="clock-date" id="cd"></div>
+    </div>
+
+    <!-- スポットチップ -->
+    <div class="spot-scroll" id="spotScroll">
+      <div class="spot-chip loading">読み込み中…</div>
+    </div>
+
+    <!-- 機器ID -->
+    <div class="dev-row">
+      <div class="dev-lbl">機器 ID</div>
+      <input class="dev-input" id="devId" type="text" placeholder="例: A-001（任意）" autocomplete="off">
+    </div>
+
+    <!-- 名前 -->
+    <div class="dev-row">
+      <div class="dev-lbl">名前</div>
+      <input class="dev-input" id="userName" type="text" placeholder="自分の名前を入力"
+        oninput="localStorage.setItem('userName', this.value)">
+    </div>
+
+    <!-- 打刻ボタン -->
+    <div class="punch-stack">
+      <button class="punch-btn rental-btn disabled" id="rentalBtn" onclick="punch('貸し出し',this)">
+        <div class="punch-icon">↑</div>
+        <div class="punch-label">貸し出し</div>
+        <div class="punch-sub">RENTAL</div>
+      </button>
+      <button class="punch-btn return-btn disabled" id="returnBtn" onclick="punch('返却',this)">
+        <div class="punch-icon">↓</div>
+        <div class="punch-label">返 却</div>
+        <div class="punch-sub">RETURN</div>
+      </button>
+    </div>
+
+    <div class="flash" id="flash"></div>
+
+    <!-- ミニログ -->
+    <div class="mini-log">
+      <div class="mini-log-hdr">
+        <div>
+          <span class="mini-log-title">直近</span>
+          <span class="mini-log-spot" id="logSpot">—</span>
+        </div>
+        <button class="icon-btn" onclick="loadLogs()">↻</button>
+      </div>
+      <div class="log-rows" id="logRows">
+        <div class="empty-hint">スポットを選択してください</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- スポット管理パネル -->
+  <div class="panel" id="panel-spots">
+    <div class="section-lbl">新しいスポットを追加</div>
+    <div class="spot-add-card">
+      <div class="spot-irow">
+        <div class="slbl">ID</div>
+        <input class="stxt" id="newId" type="text" placeholder="例: SPOT_005" oninput="checkAdd()">
+      </div>
+      <div class="spot-irow">
+        <div class="slbl">名前</div>
+        <input class="stxt" id="newName" type="text" placeholder="例: 渋谷ヒカリエ B1F" oninput="checkAdd()">
+      </div>
+    </div>
+    <button class="add-btn" id="addBtn" onclick="doAddSpot()" disabled>＋ スポットを追加</button>
+    <div class="spot-msg" id="spotMsg"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="section-lbl">登録済みスポット</div>
+      <button class="icon-btn" onclick="loadSpots()">↻</button>
+    </div>
+    <div class="spot-list" id="spotList">
+      <div class="empty-hint">読み込み中…</div>
+    </div>
+  </div>
+
+  <!-- 設定パネル -->
+  <div class="panel" id="panel-cfg">
+    <div class="cfg-section-lbl">接続設定</div>
+    <div class="cfg-card">
+      <div class="cfg-row">
+        <div class="cfg-lbl">GAS URL</div>
+        <input class="cfg-input" id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec">
+      </div>
+    </div>
+    <div class="cfg-hint">
+      Google Apps Script → デプロイ → ウェブアプリ<br>
+      アクセス: <strong>全員（匿名を含む）</strong> に設定してください
+    </div>
+    <button class="save-btn" onclick="saveCfg()">保存</button>
+
+    <div class="cfg-section-lbl" style="margin-top:8px">ホーム画面への追加</div>
+    <div class="cfg-card">
+      <div class="cfg-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+        <div class="cfg-hint" style="padding:0">
+          iPhone: Safari で開く → 共有ボタン →「ホーム画面に追加」<br>
+          Android: Chrome → メニュー →「ホーム画面に追加」
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- タブバー -->
+<nav class="tabbar">
+  <button class="tabbar-btn active" onclick="switchTab('punch',this)">
+    <div class="ti">⏺</div><div>打刻</div>
+  </button>
+  <button class="tabbar-btn" onclick="switchTab('spots',this)">
+    <div class="ti">＋</div><div>スポット</div>
+  </button>
+  <button class="tabbar-btn" onclick="switchTab('cfg',this)">
+    <div class="ti">⚙</div><div>設定</div>
+  </button>
+</nav>
+
+<script>
+const DAYS=['日','月','火','水','木','金','土'];
+let GAS_URL='';
+let currentSpot=null; // {id, name}
+let flashTimer;
+
+// ── 起動 ──────────────────────────────────────────────────
+window.addEventListener('load',()=>{
+  GAS_URL = localStorage.getItem('gasUrl')||'';
+  if(!GAS_URL){
+    document.getElementById('setupOverlay').classList.remove('hidden');
+  } else {
+    document.getElementById('setupOverlay').classList.add('hidden');
+    init();
+  }
+  startClock();
+  registerSW();
+});
+
+function init(){
+  const last = localStorage.getItem('lastSpot');
+  loadSpots(last ? JSON.parse(last) : null);
+  document.getElementById('cfgUrl').value = GAS_URL;
+  const savedName = localStorage.getItem('userName') || '';
+  document.getElementById('userName').value = savedName;
+}
+
+// ── Service Worker ─────────────────────────────────────────
+function registerSW(){
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }
+}
+
+// ── 初回設定 ─────────────────────────────────────────────
+function saveSetup(){
+  const url = document.getElementById('setupUrlInput').value.trim();
+  if(!url) return;
+  GAS_URL = url;
+  localStorage.setItem('gasUrl', url);
+  document.getElementById('setupOverlay').classList.add('hidden');
+  document.getElementById('cfgUrl').value = url;
+  init();
+}
+
+// ── タブ ─────────────────────────────────────────────────
+function switchTab(name, el){
+  document.querySelectorAll('.tabbar-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(`panel-${name}`).classList.add('active');
+}
+
+// ── 時計 ─────────────────────────────────────────────────
+function startClock(){
+  function tick(){
+    const n=new Date();
+    document.getElementById('ct').textContent=`${p(n.getHours())}:${p(n.getMinutes())}:${p(n.getSeconds())}`;
+    document.getElementById('cd').textContent=`${n.getFullYear()}年${n.getMonth()+1}月${n.getDate()}日（${DAYS[n.getDay()]}）`;
+  }
+  tick(); setInterval(tick,1000);
+}
+
+// ── スポット ──────────────────────────────────────────────
+function loadSpots(autoSelect){
+  callGAS('getSpots',{}).then(spots=>{
+    renderSpotChips(spots, autoSelect);
+    renderSpotList(spots);
+    setConn(true);
+  }).catch(()=>setConn(false));
+}
+
+function renderSpotChips(spots, autoSelect){
+  const el = document.getElementById('spotScroll');
+  if(!spots||spots.length===0){
+    el.innerHTML='<div class="spot-chip" style="pointer-events:none;font-size:11px">「スポット」タブから追加</div>';
+    setButtons(false); return;
+  }
+  el.innerHTML = spots.map(s=>
+    `<button class="spot-chip" onclick="selectSpot('${esc(JSON.stringify(s))}')">${esc(s.name)}</button>`
+  ).join('');
+  setButtons(false);
+  // 前回のスポットを復元
+  if(autoSelect){
+    const chip = [...el.querySelectorAll('.spot-chip')]
+      .find(c=>c.textContent===autoSelect.name);
+    if(chip){ chip.classList.add('active'); currentSpot=autoSelect; document.getElementById('logSpot').textContent=autoSelect.name; setButtons(true); loadLogs(); }
+  }
+}
+
+function selectSpot(jsonStr){
+  const s = JSON.parse(jsonStr);
+  currentSpot = s;
+  localStorage.setItem('lastSpot', JSON.stringify(s));
+  document.querySelectorAll('.spot-chip').forEach(c=>{
+    c.classList.toggle('active', c.textContent===s.name);
+  });
+  document.getElementById('logSpot').textContent = s.name;
+  setButtons(true);
+  loadLogs();
+}
+
+// ── 打刻 ─────────────────────────────────────────────────
+function punch(changeType, btn){
+  if(!currentSpot){ showFlash('err','スポットを選択してください'); return; }
+  const deviceId = document.getElementById('devId').value.trim() || '—';
+  const userName = document.getElementById('userName').value.trim() || '名前未設定';
+  const now = new Date();
+  const ts  = `${now.getFullYear()}/${p(now.getMonth()+1)}/${p(now.getDate())} ${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`;
+
+  addRipple(btn);
+  btn.classList.add('sending');
+  setButtons(false);
+  showFlash('wait','<span class="spin">◌</span>　書き込み中…');
+  vibrate(30);
+
+  callGAS('punch',{
+    timestamp:ts, spotId:currentSpot.id,
+    spotName:currentSpot.name, deviceId, userName, changeType,
+  }).then(()=>{
+    showFlash('ok',`${changeType}を記録しました  ${p(now.getHours())}:${p(now.getMinutes())}`);
+    prependLog({timestamp:`${p(now.getHours())}:${p(now.getMinutes())}`,deviceId,changeType});
+    vibrate(60);
+    setConn(true);
+  }).catch(e=>{
+    showFlash('err',`エラー: ${e.message}`);
+  }).finally(()=>{
+    btn.classList.remove('sending');
+    setButtons(true);
+  });
+}
+
+function setButtons(on){
+  ['rentalBtn','returnBtn'].forEach(id=>{
+    document.getElementById(id).classList.toggle('disabled',!on);
+  });
+}
+
+function addRipple(btn){
+  const r=document.createElement('span');
+  r.className='ripple'; r.style.left='50%'; r.style.top='50%';
+  btn.appendChild(r); setTimeout(()=>r.remove(),700);
+}
+
+function vibrate(ms){
+  try{ navigator.vibrate&&navigator.vibrate(ms); } catch{}
+}
+
+// ── ログ ─────────────────────────────────────────────────
+function loadLogs(){
+  if(!currentSpot) return;
+  callGAS('getLogs',{spotName:currentSpot.name}).then(logs=>{
+    const rows = document.getElementById('logRows');
+    if(!logs||logs.length===0){
+      rows.innerHTML='<div class="empty-hint">まだ記録がありません</div>'; return;
+    }
+    rows.innerHTML = logs.slice(0,5).map(logRow).join('');
+  }).catch(()=>{});
+}
+
+function prependLog(l){
+  const rows = document.getElementById('logRows');
+  const empty = rows.querySelector('.empty-hint');
+  if(empty) empty.remove();
+  const div=document.createElement('div');
+  div.innerHTML=logRow(l);
+  const item=div.firstChild;
+  item.classList.add('new');
+  rows.insertBefore(item,rows.firstChild);
+  if(rows.children.length>5) rows.removeChild(rows.lastChild);
+}
+
+function logRow(l){
+  const cls=l.changeType==='貸し出し'?'r':'t';
+  return `<div class="log-row"><div class="log-time">${esc(l.timestamp)}</div><div class="log-dev">${esc(l.deviceId)}</div><div class="badge ${cls}">${esc(l.changeType)}</div></div>`;
+}
+
+// ── フラッシュ ────────────────────────────────────────────
+function showFlash(type,html){
+  const el=document.getElementById('flash');
+  el.className=`flash show ${type}`; el.innerHTML=html;
+  clearTimeout(flashTimer);
+  if(type!=='wait') flashTimer=setTimeout(()=>el.classList.remove('show'),4000);
+}
+
+// ── スポット管理 ──────────────────────────────────────────
+function renderSpotList(spots){
+  const list=document.getElementById('spotList');
+  if(!spots||spots.length===0){
+    list.innerHTML='<div class="empty-hint">まだスポットがありません</div>'; return;
+  }
+  list.innerHTML=spots.map(s=>`
+    <div class="spot-item">
+      <div class="spot-id">${esc(s.id)}</div>
+      <div class="spot-name">${esc(s.name)}</div>
+      <button class="del-btn" onclick="doDeleteSpot('${esc(s.id)}','${esc(s.name)}')">×</button>
+    </div>`).join('');
+}
+
+function checkAdd(){
+  document.getElementById('addBtn').disabled =
+    !(document.getElementById('newId').value.trim()&&document.getElementById('newName').value.trim());
+}
+
+function doAddSpot(){
+  const id=document.getElementById('newId').value.trim();
+  const name=document.getElementById('newName').value.trim();
+  if(!id||!name) return;
+  document.getElementById('addBtn').disabled=true;
+  showSpotMsg('wait','追加中…');
+  callGAS('addSpot',{id,name}).then(res=>{
+    if(res.status==='ok'){
+      document.getElementById('newId').value='';
+      document.getElementById('newName').value='';
+      showSpotMsg('ok',`「${name}」を追加しました`);
+      loadSpots();
+    } else {
+      showSpotMsg('err',res.message||'追加に失敗しました');
+      document.getElementById('addBtn').disabled=false;
+    }
+  }).catch(e=>{ showSpotMsg('err',`エラー: ${e.message}`); document.getElementById('addBtn').disabled=false; });
+}
+
+function doDeleteSpot(id,name){
+  if(!confirm(`「${name}」を削除しますか？`)) return;
+  callGAS('deleteSpot',{id}).then(res=>{
+    if(res.status==='ok'){ showSpotMsg('ok',`「${name}」を削除しました`); loadSpots(); }
+    else showSpotMsg('err',res.message);
+  }).catch(e=>showSpotMsg('err',`エラー: ${e.message}`));
+}
+
+function showSpotMsg(type,msg){
+  const el=document.getElementById('spotMsg');
+  el.className=`spot-msg show ${type}`;
+  el.textContent=type==='ok'?`✓  ${msg}`:type==='wait'?`◌  ${msg}`:`✗  ${msg}`;
+  if(type!=='wait') setTimeout(()=>el.classList.remove('show'),4000);
+}
+
+// ── 設定保存 ─────────────────────────────────────────────
+function saveCfg(){
+  GAS_URL=document.getElementById('cfgUrl').value.trim();
+  localStorage.setItem('gasUrl',GAS_URL);
+  loadSpots(); loadLogs();
+  alert('保存しました');
+}
+
+// ── GAS API呼び出し ───────────────────────────────────────
+// GASのdoGetをGETパラメータで呼び出す（CORS対応）
+function callGAS(action, params){
+  if(!GAS_URL) return Promise.reject(new Error('GAS URLが未設定です'));
+  const url = new URL(GAS_URL);
+  url.searchParams.set('action', action);
+  Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,v));
+  return fetch(url.toString())
+    .then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
+}
+
+// ── 接続状態 ─────────────────────────────────────────────
+function setConn(ok){
+  document.getElementById('connDot').className=`dot ${ok?'ok':'err'}`;
+  document.getElementById('connLabel').textContent=ok?'接続中':'未接続';
+}
+
+// ── ユーティリティ ────────────────────────────────────────
+function p(v){ return String(v).padStart(2,'0'); }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+</script>
+</body>
+</html>
